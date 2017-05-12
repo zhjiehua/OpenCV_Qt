@@ -51,7 +51,7 @@ public:
 	@param flags	0：不初始化重心数据
 					1：初始化重心数据
 	*/
-	int Process(const String& fileName, int flag = 0);
+	//int Process(const String& fileName, int flag = 0);
 
 	int ProcessRed(const String& fileName);
 	int ProcessGreen(const String& fileName);
@@ -67,6 +67,8 @@ private:
 	vector<Point2f> massCentroid; //重心
 	Rect massCentroidRange; //重心可偏移位置
 	int levelCnt; //总级数
+
+	int showImage; //是否显示图片
 
 	QSettings *configIni; //ini文件操作指针
 	

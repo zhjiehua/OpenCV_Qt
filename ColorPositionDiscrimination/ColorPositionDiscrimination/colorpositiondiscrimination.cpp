@@ -1,13 +1,13 @@
 #include "colorpositiondiscrimination.h"
 #include "ColorPosDisClass.h"
 
-#define TEST_MODE
+//#define TEST_MODE
 
 #ifndef TEST_MODE
 #define CALIBRATION_PICTURE_NAME "cal.jpg"
 #define CURRENT_PICTURE_NAME "cur.jpg"
 #else
-#define CALIBRATION_PICTURE_NAME "6.png"
+#define CALIBRATION_PICTURE_NAME  "0_new.jpg"
 #endif
 
 ColorPositionDiscrimination::ColorPositionDiscrimination(QWidget *parent, Qt::WFlags flags)
@@ -47,12 +47,12 @@ void ColorPositionDiscrimination::timerFinish()
 		if(!flag2)
 		{
 			flag2 = 1;
-			pos = pColPosDis->Process("6.png");
+			pos = pColPosDis->ProcessGreen("6.png");
 		}
 		else
 		{
 			flag2 = 0;
-			pos = pColPosDis->Process("6.png");
+			pos = pColPosDis->ProcessGreen("6.png");
 		}
 		qDebug() << "the pos is " << pos; 
 		ui.levelLabel->setNum(pos);
@@ -90,14 +90,14 @@ void ColorPositionDiscrimination::processPic(void)
 	int ret = 0;
 
 #ifdef TEST_MODE
-	static int i = 1;
-	QString s = QString::number(i) + ".png";
+	static int i = 0;
+	QString s = QString::number(i) + "_new.jpg";
 	//ret = pColPosDis->Process(s.toStdString());
 	ret = pColPosDis->ProcessGreen(s.toStdString());
 	qDebug() <<	s;
 	i++;
-	if(i>5)
-		i = 1;
+	if(i>4)
+		i = 0;
 #else
 	//ret = pColPosDis->Process(CURRENT_PICTURE_NAME);
 	ret = pColPosDis->ProcessGreen(CURRENT_PICTURE_NAME);

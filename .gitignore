@@ -27,3 +27,8 @@
 *.exe
 *.out
 *.app
+
+ColorPositionDiscrimination/ipch
+ColorPositionDiscrimination/Win32
+ColorPositionDiscrimination/ColorPositionDiscrimination/Debug
+ColorPositionDiscrimination/ColorPositionDiscrimination/GeneratedFiles

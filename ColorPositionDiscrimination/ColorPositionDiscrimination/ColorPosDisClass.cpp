@@ -1,5 +1,12 @@
 #include "ColorPosDisClass.h"
 
+const char *pstrSrcWinTitle = "原图";
+const char *pstrHSVWinTitle = "HSV图";
+const char *pstrDestWinTitle = "目标识别图_红色";
+const char *pstrDestWinTitle2 = "目标识别图_绿色";
+const char *pstrContoursWinTitle = "轮廓图_红色";
+const char *pstrContoursWinTitle2 = "轮廓图_绿色";
+
 void ColorPosDis::readIniData(void)
 {
 		gaussianBlurSigmaX = configIni->value("/openCV/gaussianBlurSigmaX").toDouble();  
@@ -9,6 +16,7 @@ void ColorPosDis::readIniData(void)
 		redHSVThreshod.lowH = configIni->value("/openCV/redHSVThreshod.lowH").toInt();
 		redHSVThreshod.lowS = configIni->value("/openCV/redHSVThreshod.lowS").toInt();
 		redHSVThreshod.lowV = configIni->value("/openCV/redHSVThreshod.lowV").toInt();
+		showImage = configIni->value("/openCV/showImage").toInt();
 
 		greenHSVThreshod.highH = configIni->value("/openCV/greenHSVThreshod.highH").toInt();
 		greenHSVThreshod.highS = configIni->value("/openCV/greenHSVThreshod.highS").toInt();
@@ -72,6 +80,8 @@ ColorPosDis::ColorPosDis()
 		configIni->setValue("/openCV/greenHSVThreshod.lowH", "59");
 		configIni->setValue("/openCV/greenHSVThreshod.lowS", "120");
 		configIni->setValue("/openCV/greenHSVThreshod.lowV", "130");
+
+		configIni->setValue("/openCV/showImage", "0");
 
 		//向ini文件的第二个节写入内容,colorPosDis节下的第一个参数  
 		configIni->setValue("colorPosDis/levelCnt", "10");
@@ -176,8 +186,7 @@ void ColorPosDis::SetMassCentroid(vector<Point2f>& mc, Rect &re)
 		configIni->setValue(strX, float(mc.at(i).x));
 		configIni->setValue(strY, float(mc.at(i).y));
 
-		qDebug() << strX << " = " << mc.at(i).x;
-		qDebug() << strY << " = " << mc.at(i).y;
+		qDebug() << "mc" << i+1 << "= ( " << mc.at(i).x << " , " << mc.at(i).y << " )" << endl;
 	}
 
 	massCentroidRange.width = re.width;
@@ -186,184 +195,184 @@ void ColorPosDis::SetMassCentroid(vector<Point2f>& mc, Rect &re)
 	configIni->setValue("colorPosDis/massCentroidRange.height", massCentroidRange.height);
 }
 
-//#define SHOWIMAGE
-int ColorPosDis::Process(const String& fileName, int flag)
-{
-	//从文件中载入图像
-	Mat srcImage = imread(fileName, IMREAD_COLOR);
-
-	//滤波
-	GaussianBlur(srcImage, srcImage, cv::Size(0, 0), gaussianBlurSigmaX);
-
-#ifdef SHOWIMAGE
-	const char *pstrSrcWinTitle = "原图";
-	const char *pstrHSVWinTitle = "HSV图";
-	const char *pstrDestWinTitle = "目标识别图";
-	const char *pstrDestWinTitle2 = "目标识别图2";
-	const char *pstrContoursWinTitle = "轮廓图";
-
-	//创建窗口
-	namedWindow(pstrSrcWinTitle, CV_WINDOW_AUTOSIZE);
-	imshow(pstrSrcWinTitle, srcImage);
-#endif
-
-	/**************************颜色识别************************/
-	Mat imgHSV;
-	vector<Mat> hsvSplit;
-	cvtColor(srcImage, imgHSV,  COLOR_BGR2HSV);//Convert the captured frame from BGR to HSV
-
-	//因为我们读取的是彩色图，直方图均衡化需要在HSV空间做
-	split(imgHSV, hsvSplit);
-	equalizeHist(hsvSplit[2],hsvSplit[2]);
-	merge(hsvSplit,imgHSV);
-
-	//在指定窗口中显示图像
-	//imshow(pstrHSVWinTitle, imgHSV);//show the original image
-
-	Mat imgThresholdedRed, imgThresholdedGreen;
-
-	inRange(imgHSV, Scalar(redHSVThreshod.lowH, redHSVThreshod.lowS, redHSVThreshod.lowV), 
-		Scalar(redHSVThreshod.highH, redHSVThreshod.highS, redHSVThreshod.highV), imgThresholdedRed); //Threshold the image
-	inRange(imgHSV, Scalar(greenHSVThreshod.lowH, greenHSVThreshod.lowS, greenHSVThreshod.lowV), 
-		Scalar(greenHSVThreshod.highH, greenHSVThreshod.highS, greenHSVThreshod.highV), imgThresholdedGreen); //Threshold the image
-
-	//开操作 (去除一些噪点)
-	Mat element = getStructuringElement(MORPH_RECT, Size(3, 3));
-	morphologyEx(imgThresholdedRed, imgThresholdedRed, MORPH_OPEN, element);
-	morphologyEx(imgThresholdedGreen, imgThresholdedGreen, MORPH_CLOSE, element);
-
-	//闭操作 (连接一些连通域)
-	morphologyEx(imgThresholdedRed, imgThresholdedRed, MORPH_CLOSE, element);
-	morphologyEx(imgThresholdedGreen, imgThresholdedGreen, MORPH_CLOSE, element);
-
-#ifdef SHOWIMAGE
-	imshow(pstrDestWinTitle, imgThresholdedRed);//show the thresholded image
-	imshow(pstrDestWinTitle2, imgThresholdedGreen);//show the thresholded image
-#endif
-	/**************************颜色识别结束************************/
-
-	/*************************轮廓识别**************************/
-	int ret = 0;
-	vector<vector<Point> > contours; 	
-	vector<Vec4i> hierarchy;
-	Rect re;
-	//查找轮廓
-	if(flag)
-		findContours( imgThresholdedRed, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
-	else
-		findContours( imgThresholdedGreen, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
-
-	qDebug() << "contours.size() = " << contours.size() << endl;
-
-	if(contours.size() <= 0)
-	{
-		if(flag)
-			return -1;
-		else
-			return 0;
-	}
-
-	//一个颜色块的高度和长度
-	re = boundingRect(contours.at(0));
-
-	//计算轮廓矩 	
-	vector<Moments> mu(contours.size() ); 	
-	for( int i = 0; i < contours.size(); i++ ) 	
-	{ 
-		mu[i] = moments( contours[i], false ); 
-	} 	
-	//计算轮廓的质心 	
-	vector<Point2f> mc( contours.size() ); 	
-	for( int i = 0; i < contours.size(); i++) 	
-	{ 
-		mc[i] = Point2d( mu[i].m10/mu[i].m00 , mu[i].m01/mu[i].m00 );
-	}
-	
-	//检测绿色块
-	if(!flag)
-	{
-		if(contours.size() > 1)
-		{
-			ret = -1;
-		}
-		else
-		{
-			for(int j = 0; j < levelCnt; j++)
-			{
-				if(abs(massCentroid.at(j).x - mc[0].x) < massCentroidRange.width
-					&& abs(massCentroid.at(j).y - mc[0].y) < massCentroidRange.height)
-				{
-					ret = j+1;
-					break;
-				}
-			}
-		}
-	}
-
-	//检测红色块，同时更新重心数据
-	if(flag)
-	{
-		//质心排序
-		for(int i = 0; i < contours.size()-1; i++)
-		{
-			for(int j = i+1; j < contours.size(); j++)
-			{
-				if(mc.at(i).y - mc.at(j).y > re.height)
-				{
-					Point2f temp = mc.at(i);
-					mc.at(i) = mc.at(j);
-					mc.at(j) = temp;
-				}
-			}
-		}
-		for(int i = 0; i < contours.size()-1; i++)
-		{
-			for(int j = i+1; j < contours.size(); j++)
-			{
-				if(mc.at(i).y - mc.at(j).y > re.height)
-					break;
-				if(mc.at(i).x - mc.at(j).x > re.width)
-				{
-					Point2f temp = mc.at(i);
-					mc.at(i) = mc.at(j);
-					mc.at(j) = temp;
-				}
-			}
-		}
-
-
-		if(mc.size() != levelCnt)
-			return -1;
-
-		SetMassCentroid(mc, re);
-	}
-
-#ifdef SHOWIMAGE
-	//画轮廓及其质心并显示 	
-	Mat drawing = Mat::zeros( imgThresholdedRed.size(), CV_8UC3 ); 		
-	for( int i = 0, j = 0; i< contours.size(); i++ , j++) 	
-	{ 		
-		Scalar color = Scalar( 255, 0, 0);
-		drawContours( drawing, contours, i, color, 2, 8, hierarchy, 0, Point() );
-		circle( drawing, mc[i], 5, Scalar( 0, 0, 255), -1, 8, 0 );
-		rectangle(drawing, boundingRect(contours.at(i)), cvScalar(0,255,0));
-		char tam[100]; 
-		sprintf(tam, "(%0.0f,%0.0f)",mc[i].x,mc[i].y); 
-		putText(drawing, tam, Point(mc[i].x, mc[i].y), FONT_HERSHEY_SIMPLEX, 0.4, cvScalar(255,0,255),1); 	
-
-		//cout << tam << endl;
-	}
-
-	namedWindow( pstrContoursWinTitle, CV_WINDOW_AUTOSIZE );
-	imshow( pstrContoursWinTitle, drawing );
-#endif
-	/*************************轮廓识别结束**************************/
-
-	//等待按键事件
-	waitKey(1);
-
-	return ret;
-}
+////#define SHOWIMAGE
+//int ColorPosDis::Process(const String& fileName, int flag)
+//{
+//	//从文件中载入图像
+//	Mat srcImage = imread(fileName, IMREAD_COLOR);
+//
+//	//滤波
+//	GaussianBlur(srcImage, srcImage, cv::Size(0, 0), gaussianBlurSigmaX);
+//
+//#ifdef SHOWIMAGE
+//	const char *pstrSrcWinTitle = "原图";
+//	const char *pstrHSVWinTitle = "HSV图";
+//	const char *pstrDestWinTitle = "目标识别图";
+//	const char *pstrDestWinTitle2 = "目标识别图2";
+//	const char *pstrContoursWinTitle = "轮廓图";
+//
+//	//创建窗口
+//	namedWindow(pstrSrcWinTitle, CV_WINDOW_AUTOSIZE);
+//	imshow(pstrSrcWinTitle, srcImage);
+//#endif
+//
+//	/**************************颜色识别************************/
+//	Mat imgHSV;
+//	vector<Mat> hsvSplit;
+//	cvtColor(srcImage, imgHSV,  COLOR_BGR2HSV);//Convert the captured frame from BGR to HSV
+//
+//	//因为我们读取的是彩色图，直方图均衡化需要在HSV空间做
+//	split(imgHSV, hsvSplit);
+//	equalizeHist(hsvSplit[2],hsvSplit[2]);
+//	merge(hsvSplit,imgHSV);
+//
+//	//在指定窗口中显示图像
+//	//imshow(pstrHSVWinTitle, imgHSV);//show the original image
+//
+//	Mat imgThresholdedRed, imgThresholdedGreen;
+//
+//	inRange(imgHSV, Scalar(redHSVThreshod.lowH, redHSVThreshod.lowS, redHSVThreshod.lowV), 
+//		Scalar(redHSVThreshod.highH, redHSVThreshod.highS, redHSVThreshod.highV), imgThresholdedRed); //Threshold the image
+//	inRange(imgHSV, Scalar(greenHSVThreshod.lowH, greenHSVThreshod.lowS, greenHSVThreshod.lowV), 
+//		Scalar(greenHSVThreshod.highH, greenHSVThreshod.highS, greenHSVThreshod.highV), imgThresholdedGreen); //Threshold the image
+//
+//	//开操作 (去除一些噪点)
+//	Mat element = getStructuringElement(MORPH_RECT, Size(3, 3));
+//	morphologyEx(imgThresholdedRed, imgThresholdedRed, MORPH_OPEN, element);
+//	morphologyEx(imgThresholdedGreen, imgThresholdedGreen, MORPH_CLOSE, element);
+//
+//	//闭操作 (连接一些连通域)
+//	morphologyEx(imgThresholdedRed, imgThresholdedRed, MORPH_CLOSE, element);
+//	morphologyEx(imgThresholdedGreen, imgThresholdedGreen, MORPH_CLOSE, element);
+//
+//#ifdef SHOWIMAGE
+//	imshow(pstrDestWinTitle, imgThresholdedRed);//show the thresholded image
+//	imshow(pstrDestWinTitle2, imgThresholdedGreen);//show the thresholded image
+//#endif
+//	/**************************颜色识别结束************************/
+//
+//	/*************************轮廓识别**************************/
+//	int ret = 0;
+//	vector<vector<Point> > contours; 	
+//	vector<Vec4i> hierarchy;
+//	Rect re;
+//	//查找轮廓
+//	if(flag)
+//		findContours( imgThresholdedRed, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+//	else
+//		findContours( imgThresholdedGreen, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+//
+//	qDebug() << "contours.size() = " << contours.size() << endl;
+//
+//	if(contours.size() <= 0)
+//	{
+//		if(flag)
+//			return -1;
+//		else
+//			return 0;
+//	}
+//
+//	//一个颜色块的高度和长度
+//	re = boundingRect(contours.at(0));
+//
+//	//计算轮廓矩 	
+//	vector<Moments> mu(contours.size() ); 	
+//	for( int i = 0; i < contours.size(); i++ ) 	
+//	{ 
+//		mu[i] = moments( contours[i], false ); 
+//	} 	
+//	//计算轮廓的质心 	
+//	vector<Point2f> mc( contours.size() ); 	
+//	for( int i = 0; i < contours.size(); i++) 	
+//	{ 
+//		mc[i] = Point2d( mu[i].m10/mu[i].m00 , mu[i].m01/mu[i].m00 );
+//	}
+//	
+//	//检测绿色块
+//	if(!flag)
+//	{
+//		if(contours.size() > 1)
+//		{
+//			ret = -1;
+//		}
+//		else
+//		{
+//			for(int j = 0; j < levelCnt; j++)
+//			{
+//				if(abs(massCentroid.at(j).x - mc[0].x) < massCentroidRange.width
+//					&& abs(massCentroid.at(j).y - mc[0].y) < massCentroidRange.height)
+//				{
+//					ret = j+1;
+//					break;
+//				}
+//			}
+//		}
+//	}
+//
+//	//检测红色块，同时更新重心数据
+//	if(flag)
+//	{
+//		//质心排序
+//		for(int i = 0; i < contours.size()-1; i++)
+//		{
+//			for(int j = i+1; j < contours.size(); j++)
+//			{
+//				if(mc.at(i).y - mc.at(j).y > re.height)
+//				{
+//					Point2f temp = mc.at(i);
+//					mc.at(i) = mc.at(j);
+//					mc.at(j) = temp;
+//				}
+//			}
+//		}
+//		for(int i = 0; i < contours.size()-1; i++)
+//		{
+//			for(int j = i+1; j < contours.size(); j++)
+//			{
+//				if(mc.at(i).y - mc.at(j).y > re.height)
+//					break;
+//				if(mc.at(i).x - mc.at(j).x > re.width)
+//				{
+//					Point2f temp = mc.at(i);
+//					mc.at(i) = mc.at(j);
+//					mc.at(j) = temp;
+//				}
+//			}
+//		}
+//
+//
+//		if(mc.size() != levelCnt)
+//			return -1;
+//
+//		SetMassCentroid(mc, re);
+//	}
+//
+//#ifdef SHOWIMAGE
+//	//画轮廓及其质心并显示 	
+//	Mat drawing = Mat::zeros( imgThresholdedRed.size(), CV_8UC3 ); 		
+//	for( int i = 0, j = 0; i< contours.size(); i++ , j++) 	
+//	{ 		
+//		Scalar color = Scalar( 255, 0, 0);
+//		drawContours( drawing, contours, i, color, 2, 8, hierarchy, 0, Point() );
+//		circle( drawing, mc[i], 5, Scalar( 0, 0, 255), -1, 8, 0 );
+//		rectangle(drawing, boundingRect(contours.at(i)), cvScalar(0,255,0));
+//		char tam[100]; 
+//		sprintf(tam, "(%0.0f,%0.0f)",mc[i].x,mc[i].y); 
+//		putText(drawing, tam, Point(mc[i].x, mc[i].y), FONT_HERSHEY_SIMPLEX, 0.4, cvScalar(255,0,255),1); 	
+//
+//		//cout << tam << endl;
+//	}
+//
+//	namedWindow( pstrContoursWinTitle, CV_WINDOW_AUTOSIZE );
+//	imshow( pstrContoursWinTitle, drawing );
+//#endif
+//	/*************************轮廓识别结束**************************/
+//
+//	//等待按键事件
+//	waitKey(1);
+//
+//	return ret;
+//}
 
 //处理红色块
 int ColorPosDis::ProcessRed(const String& fileName)
@@ -374,16 +383,12 @@ int ColorPosDis::ProcessRed(const String& fileName)
 	//滤波
 	GaussianBlur(srcImage, srcImage, cv::Size(0, 0), gaussianBlurSigmaX);
 
-#ifdef SHOWIMAGE
-	const char *pstrSrcWinTitle = "原图";
-	const char *pstrHSVWinTitle = "HSV图";
-	const char *pstrDestWinTitle = "目标识别图";
-	const char *pstrContoursWinTitle = "轮廓图";
-
-	//创建窗口
-	namedWindow(pstrSrcWinTitle, CV_WINDOW_AUTOSIZE);
-	imshow(pstrSrcWinTitle, srcImage);
-#endif
+	//if(showImage)
+	//{
+	//	//创建窗口
+	//	namedWindow(pstrSrcWinTitle, CV_WINDOW_AUTOSIZE);
+	//	imshow(pstrSrcWinTitle, srcImage);
+	//}
 
 	/**************************颜色识别************************/
 	Mat imgHSV;
@@ -410,9 +415,10 @@ int ColorPosDis::ProcessRed(const String& fileName)
 	//闭操作 (连接一些连通域)
 	morphologyEx(imgThresholdedRed, imgThresholdedRed, MORPH_CLOSE, element);
 
-#ifdef SHOWIMAGE
-	imshow(pstrDestWinTitle, imgThresholdedRed);//show the thresholded image
-#endif
+	if(showImage)
+	{
+		imshow(pstrDestWinTitle, imgThresholdedRed);//show the thresholded image
+	}
 	/**************************颜色识别结束************************/
 
 	/*************************轮廓识别**************************/
@@ -448,7 +454,7 @@ int ColorPosDis::ProcessRed(const String& fileName)
 	{
 		for(int j = i+1; j < contours.size(); j++)
 		{
-			if(mc.at(i).y - mc.at(j).y > re.height)
+			if(abs(mc.at(i).y - mc.at(j).y) > re.height)
 			{
 				Point2f temp = mc.at(i);
 				mc.at(i) = mc.at(j);
@@ -460,9 +466,9 @@ int ColorPosDis::ProcessRed(const String& fileName)
 	{
 		for(int j = i+1; j < contours.size(); j++)
 		{
-			if(mc.at(i).y - mc.at(j).y > re.height)
+			if(abs(mc.at(i).y - mc.at(j).y) > re.height)
 				break;
-			if(mc.at(i).x - mc.at(j).x > re.width)
+			if(abs(mc.at(i).x - mc.at(j).x) > re.width)
 			{
 				Point2f temp = mc.at(i);
 				mc.at(i) = mc.at(j);
@@ -473,25 +479,26 @@ int ColorPosDis::ProcessRed(const String& fileName)
 
 	SetMassCentroid(mc, re);
 
-#ifdef SHOWIMAGE
-	//画轮廓及其质心并显示 	
-	Mat drawing = Mat::zeros( imgThresholdedRed.size(), CV_8UC3 ); 		
-	for( int i = 0, j = 0; i< contours.size(); i++ , j++) 	
-	{ 		
-		Scalar color = Scalar( 255, 0, 0);
-		drawContours( drawing, contours, i, color, 2, 8, hierarchy, 0, Point() );
-		circle( drawing, mc[i], 5, Scalar( 0, 0, 255), -1, 8, 0 );
-		rectangle(drawing, boundingRect(contours.at(i)), cvScalar(0,255,0));
-		char tam[100]; 
-		sprintf(tam, "(%0.0f,%0.0f)",mc[i].x,mc[i].y); 
-		putText(drawing, tam, Point(mc[i].x, mc[i].y), FONT_HERSHEY_SIMPLEX, 0.4, cvScalar(255,0,255),1); 	
+	if(showImage)
+	{
+		//画轮廓及其质心并显示 	
+		Mat drawing = Mat::zeros( imgThresholdedRed.size(), CV_8UC3 ); 		
+		for( int i = 0, j = 0; i< contours.size(); i++ , j++) 	
+		{ 		
+			Scalar color = Scalar( 255, 0, 0);
+			drawContours( drawing, contours, i, color, 2, 8, hierarchy, 0, Point() );
+			circle( drawing, mc[i], 5, Scalar( 0, 0, 255), -1, 8, 0 );
+			rectangle(drawing, boundingRect(contours.at(i)), cvScalar(0,255,0));
+			char tam[100]; 
+			sprintf(tam, "(%0.0f,%0.0f,%d)",mc[i].x,mc[i].y,i); 
+			putText(drawing, tam, Point(mc[i].x, mc[i].y), FONT_HERSHEY_SIMPLEX, 0.4, cvScalar(255,0,255),1); 	
 
-		//cout << tam << endl;
+			//cout << tam << endl;
+		}
+
+		namedWindow( pstrContoursWinTitle, CV_WINDOW_AUTOSIZE );
+		imshow( pstrContoursWinTitle, drawing );
 	}
-
-	namedWindow( pstrContoursWinTitle, CV_WINDOW_AUTOSIZE );
-	imshow( pstrContoursWinTitle, drawing );
-#endif
 	/*************************轮廓识别结束**************************/
 
 	//等待按键事件
@@ -510,16 +517,12 @@ int ColorPosDis::ProcessGreen(const String& fileName)
 	//滤波
 	GaussianBlur(srcImage, srcImage, cv::Size(0, 0), gaussianBlurSigmaX);
 
-#ifdef SHOWIMAGE
-	const char *pstrSrcWinTitle = "原图";
-	const char *pstrHSVWinTitle = "HSV图";
-	const char *pstrDestWinTitle2 = "目标识别图2";
-	const char *pstrContoursWinTitle = "轮廓图";
-
-	//创建窗口
-	namedWindow(pstrSrcWinTitle, CV_WINDOW_AUTOSIZE);
-	imshow(pstrSrcWinTitle, srcImage);
-#endif
+	//if(showImage)
+	//{
+	//	//创建窗口
+	//	namedWindow(pstrSrcWinTitle, CV_WINDOW_AUTOSIZE);
+	//	imshow(pstrSrcWinTitle, srcImage);
+	//}
 
 	/**************************颜色识别************************/
 	Mat imgHSV;
@@ -546,9 +549,10 @@ int ColorPosDis::ProcessGreen(const String& fileName)
 	//闭操作 (连接一些连通域)
 	morphologyEx(imgThresholdedGreen, imgThresholdedGreen, MORPH_CLOSE, element);
 
-#ifdef SHOWIMAGE
-	imshow(pstrDestWinTitle2, imgThresholdedGreen);//show the thresholded image
-#endif
+	if(showImage)
+	{
+		imshow(pstrDestWinTitle2, imgThresholdedGreen);//show the thresholded image
+	}
 	/**************************颜色识别结束************************/
 
 	/*************************轮廓识别**************************/
@@ -563,8 +567,8 @@ int ColorPosDis::ProcessGreen(const String& fileName)
 
 	if(contours.size() <= 0)
 		return 0;
-	else if(contours.size() > 1)
-		return -1;
+	//else if(contours.size() > 1)
+	//	return -1;
 
 	//计算轮廓矩 	
 	vector<Moments> mu(contours.size() ); 	
@@ -589,25 +593,26 @@ int ColorPosDis::ProcessGreen(const String& fileName)
 		}
 	}
 
-#ifdef SHOWIMAGE
-	//画轮廓及其质心并显示 	
-	Mat drawing = Mat::zeros( imgThresholdedRed.size(), CV_8UC3 ); 		
-	for( int i = 0, j = 0; i< contours.size(); i++ , j++) 	
-	{ 		
-		Scalar color = Scalar( 255, 0, 0);
-		drawContours( drawing, contours, i, color, 2, 8, hierarchy, 0, Point() );
-		circle( drawing, mc[i], 5, Scalar( 0, 0, 255), -1, 8, 0 );
-		rectangle(drawing, boundingRect(contours.at(i)), cvScalar(0,255,0));
-		char tam[100]; 
-		sprintf(tam, "(%0.0f,%0.0f)",mc[i].x,mc[i].y); 
-		putText(drawing, tam, Point(mc[i].x, mc[i].y), FONT_HERSHEY_SIMPLEX, 0.4, cvScalar(255,0,255),1); 	
+	if(showImage)
+	{
+		//画轮廓及其质心并显示 	
+		Mat drawing = Mat::zeros( imgThresholdedGreen.size(), CV_8UC3 ); 		
+		for( int i = 0, j = 0; i< contours.size(); i++ , j++) 	
+		{ 		
+			Scalar color = Scalar( 255, 0, 0);
+			drawContours( drawing, contours, i, color, 2, 8, hierarchy, 0, Point() );
+			circle( drawing, mc[i], 5, Scalar( 0, 0, 255), -1, 8, 0 );
+			rectangle(drawing, boundingRect(contours.at(i)), cvScalar(0,255,0));
+			char tam[100]; 
+			sprintf(tam, "(%0.0f,%0.0f)",mc[i].x,mc[i].y); 
+			putText(drawing, tam, Point(mc[i].x, mc[i].y), FONT_HERSHEY_SIMPLEX, 0.4, cvScalar(255,0,255),1); 	
 
-		//cout << tam << endl;
+			//cout << tam << endl;
+		}
+
+		namedWindow( pstrContoursWinTitle2, CV_WINDOW_AUTOSIZE );
+		imshow( pstrContoursWinTitle2, drawing );
 	}
-
-	namedWindow( pstrContoursWinTitle, CV_WINDOW_AUTOSIZE );
-	imshow( pstrContoursWinTitle, drawing );
-#endif
 	/*************************轮廓识别结束**************************/
 
 	//等待按键事件
