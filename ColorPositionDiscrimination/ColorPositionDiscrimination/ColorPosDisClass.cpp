@@ -454,7 +454,7 @@ int ColorPosDis::ProcessRed(const String& fileName)
 	{
 		for(int j = i+1; j < contours.size(); j++)
 		{
-			if(abs(mc.at(i).y - mc.at(j).y) > re.height)
+			if(mc.at(i).y - mc.at(j).y > re.height)
 			{
 				Point2f temp = mc.at(i);
 				mc.at(i) = mc.at(j);
@@ -466,14 +466,17 @@ int ColorPosDis::ProcessRed(const String& fileName)
 	{
 		for(int j = i+1; j < contours.size(); j++)
 		{
-			if(abs(mc.at(i).y - mc.at(j).y) > re.height)
-				break;
-			if(abs(mc.at(i).x - mc.at(j).x) > re.width)
+			if(mc.at(j).y - mc.at(i).y < re.height)
 			{
-				Point2f temp = mc.at(i);
-				mc.at(i) = mc.at(j);
-				mc.at(j) = temp;
+				if(mc.at(i).x - mc.at(j).x > re.width)
+				{
+					Point2f temp = mc.at(i);
+					mc.at(i) = mc.at(j);
+					mc.at(j) = temp;
+				}
 			}
+
+			
 		}
 	}
 
